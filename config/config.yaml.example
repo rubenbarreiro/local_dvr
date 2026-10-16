@@ -7,10 +7,15 @@ recording:
   output_dir: "./recordings"
   filename_pattern: "recording_%Y%m%d_%H%M%S.mp4"
   segment_duration: 3600  # seconds (1 hour)
-  codec: "copy"  # use 'copy' to avoid re-encoding if possible
+  codec: "copy"          # video stream is remuxed, never decoded (low memory)
+  audio_codec: "aac"     # re-encode camera PCM audio (required for MP4)
+  audio_bitrate: "64k"
+  fragmented: true       # crash/power-loss resilient segments (fragmented MP4)
+  max_muxing_queue: 128  # bounds muxer buffering memory on slow storage
 
 display:
-  enabled: true
+  # Live preview is CPU/RAM intensive; keep disabled on Raspberry Pi Zero W.
+  enabled: false
   host: "0.0.0.0"
   port: 8080
 

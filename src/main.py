@@ -87,26 +87,39 @@ def main():
                 video_stream = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
                 width = int(video_stream['width']) if video_stream and 'width' in video_stream else 640
                 height = int(video_stream['height']) if video_stream and 'height' in video_stream else 480
+                # loglevel=error keeps ffmpeg quiet; stderr is inherited (not a
+                # pipe) so it can never fill up and block the process.
                 preview_process = (
                     ffmpeg
                     .input(rtsp_url, rtsp_transport='tcp')
-                    .output('pipe:', format='mjpeg', qscale=5)
-                    .run_async(pipe_stdout=True, pipe_stderr=True)
+                    .output('pipe:', format='mjpeg', qscale=5, loglevel='error')
+                    .run_async(pipe_stdout=True)
                 )
                 logger.info(f"Web preview active (resolution: {width}x{height}) - serving MJPEG stream")
-                buffer = b''
+                buffer = bytearray()
+                max_buffer = 4 * 1024 * 1024
                 while True:
                     chunk = preview_process.stdout.read(4096)
                     if not chunk:
                         logger.warning("Preview stream ended")
                         break
-                    buffer += chunk
-                    start = buffer.find(b'\xff\xd8')
-                    end = buffer.find(b'\xff\xd9')
-                    if start != -1 and end != -1 and end > start:
-                        frame = buffer[start:end + 2]
-                        buffer = buffer[end + 2:]
-                        viewer.update_frame(frame)
+                    buffer.extend(chunk)
+                    while True:
+                        start = buffer.find(b'\xff\xd8')
+                        end = buffer.find(b'\xff\xd9')
+                        if start != -1 and end != -1 and end > start:
+                            frame = bytes(buffer[start:end + 2])
+                            del buffer[:end + 2]
+                            viewer.update_frame(frame)
+                        else:
+                            break
+                    if len(buffer) > max_buffer:
+                        # Drop garbage/partial frame if no complete JPEG is found
+                        start = buffer.rfind(b'\xff\xd8')
+                        if start > 0:
+                            del buffer[:start]
+                        else:
+                            buffer.clear()
             except Exception as e:
                 logger.error(f"Web preview error: {e}")
                 logger.info("Continuing without live preview")

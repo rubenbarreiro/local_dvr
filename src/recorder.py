@@ -21,19 +21,33 @@ class Recorder:
             self.logger.warning("Recording already in progress")
             return
 
+        rec = self.config['recording']
         self.output_pattern = self._build_output_pattern()
-        codec = self.config['recording'].get('codec', 'copy')
-        segment_duration = self.config['recording'].get('segment_duration', 3600)
+        codec = rec.get('codec', 'copy')
+        audio_codec = rec.get('audio_codec', 'aac')
+        audio_bitrate = rec.get('audio_bitrate', '64k')
+        segment_duration = rec.get('segment_duration', 3600)
+        fragmented = rec.get('fragmented', True)
+        max_muxing_queue = rec.get('max_muxing_queue', 128)
 
+        # Video is always remuxed (never decoded) so memory stays flat; only the
+        # tiny audio stream is re-encoded (camera PCM is not valid in MP4).
         output_kwargs = {
             'vcodec': 'copy' if codec == 'copy' else codec,
-            'an': None,
+            'acodec': audio_codec,
+            'audio_bitrate': audio_bitrate,
             'f': 'segment',
             'segment_format': 'mp4',
             'reset_timestamps': 1,
             'strftime': 1,
             'loglevel': 'error',
+            'max_muxing_queue_size': max_muxing_queue,
+            'threads': 1,
         }
+        if fragmented:
+            output_kwargs['segment_format_options'] = (
+                'movflags=+frag_keyframe+empty_moov+default_base_moof'
+            )
         if segment_duration:
             output_kwargs['segment_time'] = segment_duration
 

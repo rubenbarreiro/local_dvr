@@ -12,10 +12,13 @@ DEFAULT_CONFIG = {
         'filename_pattern': 'recording_%Y%m%d_%H%M%S.mp4',
         'segment_duration': 3600,  # 1 hour
         'codec': 'copy',
+        'audio_codec': 'aac',
+        'audio_bitrate': '64k',
+        'fragmented': True,
+        'max_muxing_queue': 128,
     },
     'display': {
-        'enabled': True,
-        'window_name': 'RTSP Live View',
+        'enabled': False,
         'host': '0.0.0.0',
         'port': 8080,
     },
