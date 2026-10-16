@@ -1,5 +1,4 @@
 import os
-import signal
 import ffmpeg
 import logging
 
