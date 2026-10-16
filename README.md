@@ -114,6 +114,10 @@ Key settings you can adjust:
 - **recording.audio_codec** / **recording.audio_bitrate**: Camera PCM audio is re-encoded to AAC (required for MP4).
 - **recording.fragmented**: Write fragmented MP4 so a partially written segment survives a crash or power loss.
 - **recording.max_muxing_queue**: Maximum packets buffered by the muxer (bounds memory on slow storage).
+- **recording.fix_timestamps**: Regenerate monotonic timestamps from packet arrival time. Many cameras emit RTP timestamps that periodically jump backwards; copied verbatim these corrupt the timeline and cause dropped/gray frames. Keep `true` unless the camera is known to emit correct timestamps.
+- **retention.enabled**: Enable/disable automatic deletion of old recordings (default `true`)
+- **retention.days**: Delete recordings older than this many days (default `30`). Must be > 0; set `retention.enabled: false` to keep everything.
+- **retention.interval_hours**: How often the retention check runs (default `24`, i.e. once a day). The check also runs once at startup.
 - **display.enabled**: Enable/disable the web preview server (default `false`)
 - **display.host** / **display.port**: Bind address and port for the web preview
 
@@ -144,7 +148,7 @@ Then follow the virtual environment and configuration steps above.
 
 - Recordings are written continuously and can fill the SD card quickly. Monitor free space with `df -h` and periodically move old files off the device.
 - Prefer a high-endurance SD card; continuous writes wear out cheap cards.
-- There is currently no automatic retention/rotation policy; manage files manually.
+- Automatic retention deletes recordings older than `retention.days` (default 30) while the DVR runs, so the card does not grow without bound. Adjust `retention.days` or set `retention.enabled: false` as needed.
 
 ## Troubleshooting
 
@@ -159,13 +163,16 @@ Then follow the virtual environment and configuration steps above.
 | Stream times out | Network/firewall issue | Verify camera is accessible on the network, try `ffprobe rtsp://...` manually to test |
 | Permission errors writing recordings | Directory permissions | Ensure `recordings/` is writable, or change `output_dir` to a writable location |
 | Recording file is empty / unplayable | Audio codec incompatible with MP4 | Ensure `audio_codec: "aac"` (default); camera PCM cannot be stored in MP4 directly |
-| Recordings fill the SD card | No retention policy | Manually rotate/delete old files; monitor free space |
+| Recordings play but constantly show gray/stuttering frames | Camera emits non-monotonic RTP timestamps (they jump backwards), so copied frames get crammed together in time and players drop them | Keep `fix_timestamps: true` (default); verify with `ffprobe -select_streams v:0 -show_entries packet=dts_time` that deltas are ~0.04s and never negative. Optionally lower the camera resolution or switch its encoder to Baseline (no B-frames) |
+| Older recordings unplayable (`moov atom not found`) | Written by older code that finalized the MP4 only on a clean exit, so a crash/power loss lost the moov atom | Use `fragmented: true` (default); re-encoders can sometimes salvage with `ffmpeg -i broken.mp4 -c copy fixed.mp4` |
+| Recordings fill the SD card | Retention disabled or window too long | Lower `retention.days`, or set `retention.enabled: false` only if you manage files yourself; monitor free space with `df -h` |
 
 ## Features
 
 - Recording to local storage (MP4, video remuxed with `-c copy`, audio transcoded to AAC)
 - Segmented files (default 1 hour) with proper finalization on exit
 - Fragmented MP4 segments (crash/power-loss resilient)
+- Daily retention cleanup: deletes recordings older than a configurable number of days
 - Optional web-based live MJPEG preview (disabled by default; not recommended on low-power hardware)
 - Graceful shutdown with Ctrl+C
 - Configurable via YAML

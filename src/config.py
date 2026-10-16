@@ -16,6 +16,12 @@ DEFAULT_CONFIG = {
         'audio_bitrate': '64k',
         'fragmented': True,
         'max_muxing_queue': 128,
+        'fix_timestamps': True,
+    },
+    'retention': {
+        'enabled': True,
+        'days': 30,
+        'interval_hours': 24,
     },
     'display': {
         'enabled': False,

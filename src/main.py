@@ -13,11 +13,13 @@ from config import load_config
 from stream import RTSPStream
 from recorder import Recorder
 from viewer import Viewer
+from cleanup import RetentionScheduler
 
 recorder = None
 stream = None
 viewer = None
 preview_process = None
+retention_scheduler = None
 
 def setup_logging(level='INFO'):
     logging.basicConfig(
@@ -43,10 +45,12 @@ def signal_handler(signum, frame):
             viewer.stop()
         except Exception as e:
             logger.error(f"Error stopping viewer: {e}")
+    if retention_scheduler:
+        retention_scheduler.stop()
     sys.exit(0)
 
 def main():
-    global recorder, stream, viewer, preview_process
+    global recorder, stream, viewer, preview_process, retention_scheduler
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
@@ -78,6 +82,10 @@ def main():
             logger.error(f"Failed to start recording: {e}")
             sys.exit(1)
 
+    if config.get('retention', {}).get('enabled', True):
+        retention_scheduler = RetentionScheduler(config)
+        retention_scheduler.start()
+
     if config['display'].get('enabled', True):
         try:
             viewer = Viewer(config)
@@ -89,9 +97,13 @@ def main():
                 height = int(video_stream['height']) if video_stream and 'height' in video_stream else 480
                 # loglevel=error keeps ffmpeg quiet; stderr is inherited (not a
                 # pipe) so it can never fill up and block the process.
+                # use_wallclock_as_timestamps neutralizes cameras whose RTP
+                # timestamps jump backwards; without it the preview drops and
+                # gray-freezes frames.
                 preview_process = (
                     ffmpeg
-                    .input(rtsp_url, rtsp_transport='tcp')
+                    .input(rtsp_url, rtsp_transport='tcp',
+                           use_wallclock_as_timestamps=1)
                     .output('pipe:', format='mjpeg', qscale=5, loglevel='error')
                     .run_async(pipe_stdout=True)
                 )
@@ -136,6 +148,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if retention_scheduler:
+            retention_scheduler.stop()
         if recorder:
             recorder.stop()
         if preview_process:

@@ -12,6 +12,16 @@ recording:
   audio_bitrate: "64k"
   fragmented: true       # crash/power-loss resilient segments (fragmented MP4)
   max_muxing_queue: 128  # bounds muxer buffering memory on slow storage
+  fix_timestamps: true   # regenerate monotonic timestamps from arrival time.
+                         # Disable only if the camera emits correct timestamps;
+                         # many cameras jump backwards and cause gray/dropped frames.
+
+retention:
+  # Delete recordings older than `days` while the DVR runs (checked on startup
+  # and every `interval_hours`). Set enabled: false to keep everything.
+  enabled: true
+  days: 30
+  interval_hours: 24
 
 display:
   # Live preview is CPU/RAM intensive; keep disabled on Raspberry Pi Zero W.

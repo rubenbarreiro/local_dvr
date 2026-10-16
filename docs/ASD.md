@@ -16,15 +16,17 @@ This project provides a solution to connect to a local RTSP stream from a WiFi c
 - RTSP Source (WiFi Camera): Provides video stream via RTSP
 - Stream Client: Connects to and probes the RTSP stream
 - Recording Module: Remuxes the stream to segmented MP4 files on disk
+- Retention Manager: Deletes recordings older than a configured age on a daily schedule
 - Preview Module (optional): Serves a web-based MJPEG live view
-- Configuration Manager: Manages settings (RTSP URL, segment duration, storage paths, preview settings)
+- Configuration Manager: Manages settings (RTSP URL, segment duration, storage paths, preview settings, retention)
 
 ### 3.2 Data Flow
 1. Application loads configuration
 2. Stream Client probes the RTSP endpoint
 3. Recording Module starts an FFmpeg process that remuxes packets directly to disk (no decoding, no Python buffering)
 4. Recordings are split into segments; on shutdown the active segment is finalized
-5. If enabled, the Preview Module decodes a low-cost MJPEG stream and serves it over HTTP
+5. If enabled, the Retention Manager periodically deletes recordings older than the configured number of days
+6. If enabled, the Preview Module decodes a low-cost MJPEG stream and serves it over HTTP
 
 ## 4. Technology Stack
 - **Language**: Python
@@ -38,6 +40,7 @@ Configuration parameters include:
 - RTSP URL (rtsp://user:pass@host:port/path)
 - Recording settings (video codec, audio codec/bitrate, container, segment duration, fragmentation, muxing queue)
 - Storage location and naming conventions
+- Retention settings (enabled, max age in days, check interval)
 - Preview settings (enabled, host, port)
 
 ## 6. Functional Requirements
@@ -47,6 +50,7 @@ Configuration parameters include:
 - FR-004: Provide an optional web-based live preview
 - FR-005: Configure parameters via configuration file
 - FR-006: Keep memory usage bounded regardless of recording duration
+- FR-007: Automatically delete recordings older than a configured number of days
 
 ## 7. Non-Functional Requirements
 - Low memory footprint (target: Raspberry Pi Zero W, 512 MB RAM)
@@ -65,6 +69,7 @@ local_dvr/
 ├── src/
 │   ├── stream.py            # RTSP probing
 │   ├── recorder.py          # Segmented recording via FFmpeg
+│   ├── cleanup.py           # Daily retention cleanup
 │   ├── viewer.py            # Web MJPEG preview server
 │   ├── config.py            # Configuration management
 │   └── main.py              # Application entry point
@@ -80,9 +85,10 @@ local_dvr/
 - Segment via FFmpeg's `segment` muxer with `-strftime`, `-reset_timestamps`
 - Graceful shutdown via `q` on FFmpeg stdin (SIGINT/SIGTERM handled at app level)
 - Timestamp recordings (e.g., recording_YYYYMMDD_HHMMSS.mp4)
+- Retention runs as a daemon thread in the main process: it cleans up on startup and then every `retention.interval_hours`. Age is based on file modification time; only files matching the recording filename pattern are considered
 
 ## 10. Future Considerations
 - Motion detection
 - Multiple camera support
 - Web-based management UI
-- Storage management (auto-rotation/deletion/retention policy)
+- Configurable retention by total disk usage (in addition to age)

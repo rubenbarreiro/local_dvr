@@ -29,6 +29,7 @@ class Recorder:
         segment_duration = rec.get('segment_duration', 3600)
         fragmented = rec.get('fragmented', True)
         max_muxing_queue = rec.get('max_muxing_queue', 128)
+        fix_timestamps = rec.get('fix_timestamps', True)
 
         # Video is always remuxed (never decoded) so memory stays flat; only the
         # tiny audio stream is re-encoded (camera PCM is not valid in MP4).
@@ -51,8 +52,17 @@ class Recorder:
         if segment_duration:
             output_kwargs['segment_time'] = segment_duration
 
+        input_kwargs = {'rtsp_transport': 'tcp'}
+        if fix_timestamps:
+            # Many cameras emit non-monotonic RTP timestamps (they periodically
+            # jump backwards). Copied verbatim, ffmpeg bumps the offending DTS
+            # values, cramming most frames into a single instant, which makes
+            # players drop them and show gray/stuttering video. Deriving the
+            # timestamps from packet arrival time keeps the timeline monotonic.
+            input_kwargs['use_wallclock_as_timestamps'] = 1
+
         try:
-            input_stream = ffmpeg.input(rtsp_url, rtsp_transport='tcp')
+            input_stream = ffmpeg.input(rtsp_url, **input_kwargs)
             stream = input_stream.output(self.output_pattern, **output_kwargs)
             self.process = stream.run_async(pipe_stdin=True)
             self.logger.info(
