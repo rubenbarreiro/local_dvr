@@ -92,18 +92,24 @@ def main():
                 preview_process = (
                     ffmpeg
                     .input(rtsp_url, rtsp_transport='tcp')
-                    .output('pipe:', format='mjpeg', vframes=0, qscale=5)
+                    .output('pipe:', format='mjpeg', qscale=5)
                     .run_async(pipe_stdout=True, pipe_stderr=True)
                 )
                 logger.info(f"Web preview active (resolution: {width}x{height}) - serving MJPEG stream")
+                buffer = b''
                 while True:
-                    frame_data = preview_process.stdout.read(1024 * 1024)
-                    if not frame_data:
+                    chunk = preview_process.stdout.read(4096)
+                    if not chunk:
                         logger.warning("Preview stream ended")
                         break
-                    # For MJPEG, ffmpeg outputs full JPEG frames in the pipe
-                    viewer.update_frame(frame_data)
-                    time.sleep(0.01)
+                    buffer += chunk
+                    # MJPEG frames start with FF D8 and end with FF D9
+                    start = buffer.find(b'\xff\xd8')
+                    end = buffer.find(b'\xff\xd9')
+                    if start != -1 and end != -1 and end > start:
+                        frame = buffer[start:end + 2]
+                        buffer = buffer[end + 2:]
+                        viewer.update_frame(frame)
             except Exception as e:
                 logger.error(f"Web preview error: {e}")
                 logger.info("Continuing without live preview")
