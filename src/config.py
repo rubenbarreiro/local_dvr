@@ -16,6 +16,8 @@ DEFAULT_CONFIG = {
     'display': {
         'enabled': True,
         'window_name': 'RTSP Live View',
+        'host': '0.0.0.0',
+        'port': 8080,
     },
     'general': {
         'log_level': 'INFO',

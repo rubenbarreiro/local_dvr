@@ -4,7 +4,6 @@ import os
 import logging
 import signal
 import time
-import numpy as np
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,6 +18,7 @@ from viewer import Viewer
 recorder = None
 stream = None
 viewer = None
+preview_process = None
 
 def setup_logging(level='INFO'):
     logging.basicConfig(
@@ -34,16 +34,20 @@ def signal_handler(signum, frame):
             recorder.stop()
         except Exception as e:
             logger.error(f"Error stopping recorder: {e}")
+    if preview_process:
+        try:
+            preview_process.terminate()
+        except Exception as e:
+            logger.error(f"Error stopping preview: {e}")
     if viewer:
         try:
-            import cv2
-            cv2.destroyAllWindows()
+            viewer.stop()
         except Exception as e:
-            logger.error(f"Error closing viewer: {e}")
+            logger.error(f"Error stopping viewer: {e}")
     sys.exit(0)
 
 def main():
-    global recorder, stream, viewer
+    global recorder, stream, viewer, preview_process
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
@@ -76,39 +80,35 @@ def main():
             logger.error(f"Failed to start recording: {e}")
             sys.exit(1)
 
-    # Initialize viewer if display is enabled
     if config['display'].get('enabled', True):
         try:
-            import cv2
             viewer = Viewer(config)
-            logger.info(f"Live preview started (window: {viewer.window_name}). Press 'q' to quit, 'r' to toggle recording")
+            viewer.start_server()
             try:
                 probe = ffmpeg.probe(rtsp_url)
                 video_stream = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
                 width = int(video_stream['width']) if video_stream and 'width' in video_stream else 640
                 height = int(video_stream['height']) if video_stream and 'height' in video_stream else 480
-                process = (
+                preview_process = (
                     ffmpeg
                     .input(rtsp_url, rtsp_transport='tcp')
-                    .output('pipe:', format='rawvideo', pix_fmt='bgr24')
+                    .output('pipe:', format='mjpeg', vframes=0, qscale=5)
                     .run_async(pipe_stdout=True, pipe_stderr=True)
                 )
-                logger.info(f"Live preview active (resolution: {width}x{height}) - logs every 5s")
+                logger.info(f"Web preview active (resolution: {width}x{height}) - serving MJPEG stream")
                 while True:
-                    in_bytes = process.stdout.read(width * height * 3)
-                    if not in_bytes:
+                    frame_data = preview_process.stdout.read(1024 * 1024)
+                    if not frame_data:
                         logger.warning("Preview stream ended")
                         break
-                    frame = np.frombuffer(in_bytes, np.uint8).reshape([height, width, 3])
-                    if not viewer.display(frame):
-                        break
+                    # For MJPEG, ffmpeg outputs full JPEG frames in the pipe
+                    viewer.update_frame(frame_data)
+                    time.sleep(0.01)
             except Exception as e:
-                logger.error(f"Live preview error: {e}")
+                logger.error(f"Web preview error: {e}")
                 logger.info("Continuing without live preview")
-        except ImportError:
-            logger.error("OpenCV not available. Disabling live preview.")
         except Exception as e:
-            logger.error(f"Failed to start live preview: {e}")
+            logger.error(f"Failed to start web preview: {e}")
     else:
         logger.info("Live preview disabled in configuration")
         try:
@@ -117,18 +117,20 @@ def main():
             pass
 
     try:
-        if config['display'].get('enabled', True) and 'process' in locals() and process.poll() is None:
-            pass  # already in loop
         signal.pause()
     except KeyboardInterrupt:
         pass
     finally:
         if recorder:
             recorder.stop()
+        if preview_process:
+            try:
+                preview_process.terminate()
+            except Exception:
+                pass
         if viewer:
             try:
-                import cv2
-                cv2.destroyAllWindows()
+                viewer.stop()
             except Exception:
                 pass
         logger.info("Application terminated")

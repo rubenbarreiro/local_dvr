@@ -7,7 +7,6 @@ A simple DVR for local RTSP streams from WiFi cameras. Provides live viewing and
 Before installing, ensure you have the following system dependencies:
 
 - **FFmpeg**: Required for RTSP stream handling, probing, and recording (`ffmpeg` and `ffprobe`)
-- **OpenCV system libraries**: Required for live view display (`cv2.imshow`)
 - **Python 3.8+**: Tested with Python 3.14
 - **python3-venv**: Required for creating isolated Python virtual environments
 
@@ -21,10 +20,10 @@ sudo apt update
 
 ### 2. Install system dependencies
 
-Install FFmpeg, OpenCV system libraries, and Python venv support:
+Install FFmpeg and Python venv support:
 
 ```bash
-sudo apt install -y ffmpeg python3-venv libgl1 libglib2.0-0
+sudo apt install -y ffmpeg python3-venv
 ```
 
 Verify FFmpeg installation:
@@ -32,8 +31,6 @@ Verify FFmpeg installation:
 ```bash
 ffmpeg -version && ffprobe -version
 ```
-
-> **Note:** If you're running on a headless server without a GUI/display server, you can skip live view by disabling it in your configuration (see Configuration section). The `libgl1` package is mainly needed for GUI display functionality.
 
 ### 3. Set up a Python virtual environment (recommended)
 
@@ -63,7 +60,7 @@ pip install -r requirements.txt
 Verify Python dependencies:
 
 ```bash
-python3 -c "import ffmpeg, cv2, yaml; print('All Python dependencies OK')"
+python3 -c "import ffmpeg, yaml; print('All Python dependencies OK')"
 ```
 
 ## Configuration
@@ -90,12 +87,25 @@ python -m src.main
 
 On first run, the application will attempt to connect to the configured RTSP stream. If successful, you'll see a connection confirmation. Use `Ctrl+C` to exit gracefully.
 
+### Web-based live preview
+
+When `display.enabled` is set to `true` (default), a web server will start serving a live MJPEG preview. After starting the application, open your browser and navigate to:
+
+```
+http://localhost:8080
+```
+
+If accessing from another device on the same network, replace `localhost` with the host machine's IP address.
+
+The web preview logs frame activity every 5 seconds in the console.
+
 ### Configuration options
 
 Key settings you can adjust:
 
 - **RTSP URL**: Camera stream endpoint (required)
-- **display.enabled**: Set to `false` for headless operation (no GUI). If running without a display server, disable this to avoid `cv2.imshow` errors.
+- **display.enabled**: Set to `false` to disable the web preview server
+- **display.window_name**: Legacy setting (kept for compatibility, not used in web preview)
 - **recording.enabled**: Enable/disable automatic recording
 - **recording.output_dir**: Directory where recordings are saved (defaults to `./recordings`)
 - **recording.codec**: Use `copy` to avoid re-encoding (faster, preserves quality) when possible
@@ -109,14 +119,14 @@ Key settings you can adjust:
 | `No such file or directory: 'ffprobe'` | FFmpeg not installed or not in PATH | Run `sudo apt install ffmpeg` and verify with `ffprobe -version` |
 | `No such file or directory: 'ffmpeg'` | FFmpeg not installed | Install FFmpeg as above |
 | `The virtual environment was not created successfully because ensurepip is not available` | Missing `python3-venv` package | Run `sudo apt install python3-venv` |
-| `cv2.imshow` fails / OpenGL errors | Missing OpenCV system libs or no display server | Install `libgl1 libglib2.0-0`, or set `display.enabled: false` for headless mode |
+| Cannot access web preview | Firewall or wrong URL | Ensure port 8080 is accessible; try `http://127.0.0.1:8080` from the same machine |
 | Connection fails with auth error | Invalid credentials/URL | Double-check your RTSP URL format and credentials in `config.yaml` |
 | Stream times out | Network/firewall issue | Verify camera is accessible on the network, try `ffprobe rtsp://...` manually to test |
 | Permission errors writing recordings | Directory permissions | Ensure `recordings/` is writable, or change `output_dir` to a writable location |
 
 ## Features
 
-- Live view of RTSP stream
+- Web-based live MJPEG preview (toggleable via config)
 - Recording to local storage (MP4 format)
 - Hourly segmenting (1 hour per file) with proper cleanup on exit
 - Graceful shutdown with Ctrl+C
