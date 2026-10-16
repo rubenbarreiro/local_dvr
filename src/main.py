@@ -4,9 +4,12 @@ import os
 import logging
 import signal
 import time
+import numpy as np
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import ffmpeg
 
 from config import load_config
 from stream import RTSPStream
@@ -79,29 +82,26 @@ def main():
             import cv2
             viewer = Viewer(config)
             logger.info(f"Live preview started (window: {viewer.window_name}). Press 'q' to quit, 'r' to toggle recording")
-            # Simple loop to show live preview
             try:
-                # Read frames from the input stream via ffmpeg
                 probe = ffmpeg.probe(rtsp_url)
-                width = probe['streams'][0].get('width', 640)
-                height = probe['streams'][0].get('height', 480)
+                video_stream = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
+                width = int(video_stream['width']) if video_stream and 'width' in video_stream else 640
+                height = int(video_stream['height']) if video_stream and 'height' in video_stream else 480
                 process = (
                     ffmpeg
                     .input(rtsp_url, rtsp_transport='tcp')
                     .output('pipe:', format='rawvideo', pix_fmt='bgr24')
-                    .run_async(pipe_stdout=True)
+                    .run_async(pipe_stdout=True, pipe_stderr=True)
                 )
+                logger.info(f"Live preview active (resolution: {width}x{height}) - logs every 5s")
                 while True:
                     in_bytes = process.stdout.read(width * height * 3)
                     if not in_bytes:
+                        logger.warning("Preview stream ended")
                         break
-                    frame = cv2.imdecode(np.frombuffer(in_bytes, np.uint8), cv2.IMREAD_COLOR) if False else None  # fallback
-                    # Easier: use numpy
-                    import numpy as np
                     frame = np.frombuffer(in_bytes, np.uint8).reshape([height, width, 3])
                     if not viewer.display(frame):
                         break
-                    time.sleep(0.001)
             except Exception as e:
                 logger.error(f"Live preview error: {e}")
                 logger.info("Continuing without live preview")
@@ -117,6 +117,8 @@ def main():
             pass
 
     try:
+        if config['display'].get('enabled', True) and 'process' in locals() and process.poll() is None:
+            pass  # already in loop
         signal.pause()
     except KeyboardInterrupt:
         pass
