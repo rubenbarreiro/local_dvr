@@ -68,23 +68,7 @@ python3 -c "import ffmpeg, cv2, yaml; print('All Python dependencies OK')"
 
 ## Configuration
 
-You have two options for configuring your RTSP stream credentials. Using a `.env` file is **strongly recommended** to avoid committing sensitive credentials to version control.
-
-### Option 1: Environment variables (.env) - Recommended
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your preferred editor and set your RTSP URL:
-
-```bash
-RTSP_URL=rtsp://username:password@192.168.1.100:554/stream
-```
-
-> The `.env` file is gitignored and will override values in `config.yaml`.
-
-### Option 2: YAML configuration
+Configure your RTSP stream and recording settings via YAML:
 
 ```bash
 cp config/config.yaml.example config/config.yaml
@@ -110,12 +94,12 @@ On first run, the application will attempt to connect to the configured RTSP str
 
 Key settings you can adjust:
 
-- **RTSP URL**: Camera stream endpoint
+- **RTSP URL**: Camera stream endpoint (required)
 - **display.enabled**: Set to `false` for headless operation (no GUI). If running without a display server, disable this to avoid `cv2.imshow` errors.
 - **recording.enabled**: Enable/disable automatic recording
 - **recording.output_dir**: Directory where recordings are saved (defaults to `./recordings`)
 - **recording.codec**: Use `copy` to avoid re-encoding (faster, preserves quality) when possible
-- **recording.segment_duration**: Split recordings into segments (in seconds)
+- **recording.segment_duration**: Split recordings into segments (in seconds). Default: 3600 (1 hour). If the process exits before reaching the segment duration, the current file will be properly closed.
 - **rtsp.reconnect_interval**: Time between reconnection attempts on failure
 
 ## Troubleshooting
@@ -126,7 +110,7 @@ Key settings you can adjust:
 | `No such file or directory: 'ffmpeg'` | FFmpeg not installed | Install FFmpeg as above |
 | `The virtual environment was not created successfully because ensurepip is not available` | Missing `python3-venv` package | Run `sudo apt install python3-venv` |
 | `cv2.imshow` fails / OpenGL errors | Missing OpenCV system libs or no display server | Install `libgl1 libglib2.0-0`, or set `display.enabled: false` for headless mode |
-| Connection fails with auth error | Invalid credentials/URL | Double-check your RTSP URL format and credentials in `.env` or `config.yaml` |
+| Connection fails with auth error | Invalid credentials/URL | Double-check your RTSP URL format and credentials in `config.yaml` |
 | Stream times out | Network/firewall issue | Verify camera is accessible on the network, try `ffprobe rtsp://...` manually to test |
 | Permission errors writing recordings | Directory permissions | Ensure `recordings/` is writable, or change `output_dir` to a writable location |
 
@@ -134,7 +118,6 @@ Key settings you can adjust:
 
 - Live view of RTSP stream
 - Recording to local storage (MP4 format)
-- Timestamped recordings with optional segmentation
-- Environment variable support for secure credential management
+- Hourly segmenting (1 hour per file) with proper cleanup on exit
 - Graceful shutdown with Ctrl+C
-- Configurable via YAML or environment variables
+- Configurable via YAML

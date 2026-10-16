@@ -9,6 +9,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import load_config
 from stream import RTSPStream
+from recorder import Recorder
+
+recorder = None
+stream = None
 
 def setup_logging(level='INFO'):
     logging.basicConfig(
@@ -17,11 +21,19 @@ def setup_logging(level='INFO'):
     )
 
 def signal_handler(signum, frame):
-    logging.info("Shutdown requested...")
+    logger = logging.getLogger(__name__)
+    logger.info("Shutdown requested...")
+    if recorder:
+        try:
+            recorder.stop()
+        except Exception as e:
+            logger.error(f"Error stopping recorder: {e}")
     sys.exit(0)
 
 def main():
+    global recorder, stream
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     config = load_config()
     setup_logging(config['general']['log_level'])
@@ -42,6 +54,24 @@ def main():
     except Exception as e:
         logger.error(f"Failed to connect: {e}")
         sys.exit(1)
+
+    if config['recording'].get('enabled', True):
+        try:
+            input_stream = stream.create_input()
+            recorder = Recorder(config)
+            recorder.start(input_stream)
+        except Exception as e:
+            logger.error(f"Failed to start recording: {e}")
+            sys.exit(1)
+
+    try:
+        signal.pause()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if recorder:
+            recorder.stop()
+        logger.info("Application terminated")
 
 if __name__ == '__main__':
     main()

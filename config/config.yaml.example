@@ -6,7 +6,7 @@ recording:
   enabled: true
   output_dir: "./recordings"
   filename_pattern: "recording_%Y%m%d_%H%M%S.mp4"
-  segment_duration: 300  # seconds (5 minutes)
+  segment_duration: 3600  # seconds (1 hour)
   codec: "copy"  # use 'copy' to avoid re-encoding if possible
 
 display:

@@ -2,6 +2,8 @@ import os
 import datetime
 import ffmpeg
 import logging
+import signal
+import threading
 
 class Recorder:
     def __init__(self, config):
@@ -9,6 +11,7 @@ class Recorder:
         self.logger = logging.getLogger(__name__)
         self.process = None
         self.output_path = None
+        self._stop_event = threading.Event()
 
     def _generate_filename(self):
         pattern = self.config['recording']['filename_pattern']
@@ -24,17 +27,21 @@ class Recorder:
 
         self.output_path = self._generate_filename()
         codec = self.config['recording'].get('codec', 'copy')
-        segment_duration = self.config['recording'].get('segment_duration')
+        segment_duration = self.config['recording'].get('segment_duration', 3600)
 
         try:
-            stream = input_stream.output(
-                self.output_path,
-                c=codec,
-                f='mp4',
-                **({'segment_time': segment_duration, 'reset_timestamps': 1} if segment_duration else {})
-            )
+            stream_kwargs = {
+                'c': codec,
+                'f': 'mp4',
+                'movflags': '+faststart'
+            }
+            if segment_duration:
+                stream_kwargs['segment_time'] = segment_duration
+                stream_kwargs['reset_timestamps'] = 1
+
+            stream = input_stream.output(self.output_path, **stream_kwargs)
             self.process = stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
-            self.logger.info(f"Recording started: {self.output_path}")
+            self.logger.info(f"Recording started: {self.output_path} (segment: {segment_duration}s)")
         except Exception as e:
             self.logger.error(f"Failed to start recording: {e}")
             raise
@@ -44,12 +51,29 @@ class Recorder:
             return
 
         try:
-            self.process.stdin.write(b'q')
-            self.process.communicate(timeout=5)
+            self.process.stdin.write(b'q\n')
+            self.process.stdin.flush()
+            try:
+                self.process.wait(timeout=10)
+            except Exception:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=5)
+                except Exception:
+                    self.process.kill()
             self.process = None
             self.logger.info(f"Recording stopped: {self.output_path}")
         except Exception as e:
             self.logger.error(f"Error stopping recording: {e}")
             if self.process:
-                self.process.kill()
+                try:
+                    self.process.kill()
+                except Exception:
+                    pass
                 self.process = None
+
+    def close(self):
+        self.stop()
+
+    def __del__(self):
+        self.close()
