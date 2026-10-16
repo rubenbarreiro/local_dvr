@@ -2,8 +2,6 @@ import os
 import datetime
 import ffmpeg
 import logging
-import signal
-import threading
 
 class Recorder:
     def __init__(self, config):
@@ -11,7 +9,7 @@ class Recorder:
         self.logger = logging.getLogger(__name__)
         self.process = None
         self.output_path = None
-        self._stop_event = threading.Event()
+        self.input_stream = None
 
     def _generate_filename(self):
         pattern = self.config['recording']['filename_pattern']
@@ -20,7 +18,7 @@ class Recorder:
         os.makedirs(output_dir, exist_ok=True)
         return os.path.join(output_dir, timestamp)
 
-    def start(self, input_stream):
+    def start(self, rtsp_url):
         if self.process is not None:
             self.logger.warning("Recording already in progress")
             return
@@ -30,16 +28,20 @@ class Recorder:
         segment_duration = self.config['recording'].get('segment_duration', 3600)
 
         try:
-            stream_kwargs = {
-                'c': codec,
+            input_stream = ffmpeg.input(rtsp_url, rtsp_transport='tcp')
+            output_kwargs = {
+                'vcodec': codec if codec != 'copy' else 'copy',
+                'an': None,
                 'f': 'mp4',
-                'movflags': '+faststart'
             }
-            if segment_duration:
-                stream_kwargs['segment_time'] = segment_duration
-                stream_kwargs['reset_timestamps'] = 1
+            if codec == 'copy' and segment_duration:
+                output_kwargs['segment_time'] = segment_duration
+                output_kwargs['reset_timestamps'] = 1
+            elif segment_duration and codec != 'copy':
+                output_kwargs['segment_time'] = segment_duration
+                output_kwargs['reset_timestamps'] = 1
 
-            stream = input_stream.output(self.output_path, **stream_kwargs)
+            stream = input_stream.output(self.output_path, **output_kwargs)
             self.process = stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
             self.logger.info(f"Recording started: {self.output_path} (segment: {segment_duration}s)")
         except Exception as e:
@@ -51,13 +53,16 @@ class Recorder:
             return
 
         try:
-            self.process.stdin.write(b'q\n')
-            self.process.stdin.flush()
             try:
-                self.process.wait(timeout=10)
+                self.process.stdin.write(b'q\n')
+                self.process.stdin.flush()
             except Exception:
-                self.process.terminate()
+                pass
+            try:
+                self.process.wait(timeout=15)
+            except Exception:
                 try:
+                    self.process.terminate()
                     self.process.wait(timeout=5)
                 except Exception:
                     self.process.kill()
@@ -71,9 +76,3 @@ class Recorder:
                 except Exception:
                     pass
                 self.process = None
-
-    def close(self):
-        self.stop()
-
-    def __del__(self):
-        self.close()

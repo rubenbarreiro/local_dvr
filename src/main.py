@@ -3,7 +3,6 @@ import sys
 import os
 import logging
 import signal
-import time
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -73,9 +72,8 @@ def main():
 
     if config['recording'].get('enabled', True):
         try:
-            input_stream = stream.create_input()
             recorder = Recorder(config)
-            recorder.start(input_stream)
+            recorder.start(rtsp_url)
         except Exception as e:
             logger.error(f"Failed to start recording: {e}")
             sys.exit(1)
@@ -103,7 +101,6 @@ def main():
                         logger.warning("Preview stream ended")
                         break
                     buffer += chunk
-                    # MJPEG frames start with FF D8 and end with FF D9
                     start = buffer.find(b'\xff\xd8')
                     end = buffer.find(b'\xff\xd9')
                     if start != -1 and end != -1 and end > start:
@@ -116,7 +113,6 @@ def main():
         except Exception as e:
             logger.error(f"Failed to start web preview: {e}")
     else:
-        logger.info("Live preview disabled in configuration")
         try:
             signal.pause()
         except KeyboardInterrupt:
