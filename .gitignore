@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.so
+*.log
+recordings/
+*.mp4
+*.avi
+*.mkv
+.env
+config/config.yaml
+venv/
+.env/
+.env
