@@ -9,6 +9,7 @@ Before installing, ensure you have the following system dependencies:
 - **FFmpeg**: Required for RTSP stream handling, probing, and recording (`ffmpeg` and `ffprobe`)
 - **OpenCV system libraries**: Required for live view display (`cv2.imshow`)
 - **Python 3.8+**: Tested with Python 3.14
+- **python3-venv**: Required for creating isolated Python virtual environments
 
 ## Installation
 
@@ -18,33 +19,25 @@ Before installing, ensure you have the following system dependencies:
 sudo apt update
 ```
 
-### 2. Install FFmpeg
+### 2. Install system dependencies
 
-FFmpeg is required for robust RTSP stream handling and recording.
+Install FFmpeg, OpenCV system libraries, and Python venv support:
 
 ```bash
-sudo apt install -y ffmpeg
+sudo apt install -y ffmpeg python3-venv libgl1 libglib2.0-0
 ```
 
-Verify the installation:
+Verify FFmpeg installation:
 
 ```bash
 ffmpeg -version && ffprobe -version
 ```
 
-### 3. Install OpenCV system dependencies (for live view)
+> **Note:** If you're running on a headless server without a GUI/display server, you can skip live view by disabling it in your configuration (see Configuration section). The `libgl1` package is mainly needed for GUI display functionality.
 
-If you plan to use the live view feature (display enabled), install the required system libraries:
+### 3. Set up a Python virtual environment (recommended)
 
-```bash
-sudo apt install -y libgl1 libglib2.0-0
-```
-
-> **Note:** If you're running on a headless server without a GUI/display server, you can skip live view by disabling it in your configuration (see Configuration section below). OpenCV is still required by the current codebase if the viewer module is imported.
-
-### 4. Set up a Python virtual environment (recommended)
-
-Ubuntu uses PEP 668 (externally managed Python), so it's strongly recommended to use a virtual environment:
+Ubuntu uses PEP 668 (externally managed Python), so it's strongly recommended to use an isolated virtual environment:
 
 ```bash
 cd /home/ruben/Projects/local_dvr
@@ -52,13 +45,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-To deactivate later:
+Your shell prompt should now show `(.venv)` indicating the environment is active. To deactivate later:
 
 ```bash
 deactivate
 ```
 
-### 5. Install Python dependencies
+### 4. Install Python dependencies
 
 With the virtual environment activated:
 
@@ -131,6 +124,7 @@ Key settings you can adjust:
 |---|---|---|
 | `No such file or directory: 'ffprobe'` | FFmpeg not installed or not in PATH | Run `sudo apt install ffmpeg` and verify with `ffprobe -version` |
 | `No such file or directory: 'ffmpeg'` | FFmpeg not installed | Install FFmpeg as above |
+| `The virtual environment was not created successfully because ensurepip is not available` | Missing `python3-venv` package | Run `sudo apt install python3-venv` |
 | `cv2.imshow` fails / OpenGL errors | Missing OpenCV system libs or no display server | Install `libgl1 libglib2.0-0`, or set `display.enabled: false` for headless mode |
 | Connection fails with auth error | Invalid credentials/URL | Double-check your RTSP URL format and credentials in `.env` or `config.yaml` |
 | Stream times out | Network/firewall issue | Verify camera is accessible on the network, try `ffprobe rtsp://...` manually to test |
